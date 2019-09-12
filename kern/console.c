@@ -192,6 +192,8 @@ cga_putc(int c)
 	}
 
 	// What is the purpose of this?
+	// A: CRT size is 25(row) x 80 (col)
+	// shift one line on the screen
 	if (crt_pos >= CRT_SIZE) {
 		int i;
 
