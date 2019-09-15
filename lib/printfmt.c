@@ -7,7 +7,6 @@
 #include <inc/string.h>
 #include <inc/stdarg.h>
 #include <inc/error.h>
-#include <inc/textcolor.h>
 
 /*
  * Space or zero padding and a field width are supported for the numeric
@@ -91,10 +90,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
 	while (1) {
 		while ((ch = *(unsigned char *) fmt++) != '%') {
-			if (ch == '\0'){
-				textcolor = 0x0700;
-				return;
-			}
+			if (ch == '\0') return;
 			putch(ch, putdat);
 		}
 
@@ -228,11 +224,6 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			base = 16;
 		number:
 			printnum(putch, putdat, num, base, width, padc);
-			break;
-		
-		// text color
-		case 'C':
-			textcolor = getuint(&ap, lflag);
 			break;
 		
 		// escaped '%' character

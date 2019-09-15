@@ -5,7 +5,6 @@
 #include <inc/kbdreg.h>
 #include <inc/string.h>
 #include <inc/assert.h>
-#include <inc/textcolor.h>
 
 #include <kern/console.h>
 
@@ -159,16 +158,114 @@ cga_init(void)
 }
 
 
+/***** VGA displays ANSI Escape sequences *****/
+
+/**
+ * Syntax of ANSI escape sequences: http://ascii-table.com/ansi-escape-sequences.php
+ * 
+ * Informations about CGA/VGA color display could been cited 
+ * at https://pdos.csail.mit.edu/6.828/2008/readings/hardware/vgadoc/VGABIOS.TXT.
+ * 
+*/
+
+
+static uint8_t foreground_vgamap[]={
+	0b0000,	// Black
+	0b0100,	// Red
+	0b0010,	// Green
+	0b1110,	// Yellow
+	0b0001,	// Blue
+	0b0101,	// Magenta
+	0b0011,	// Cyan
+	0b1111,	// White
+};
+
+static uint8_t background_vgamap[]={
+	0b000,	// Black
+	0b100,	// Red
+	0b010,	// Green
+	0b110,	// TODO: doesn't support 'yellow', use 'brown' instead.
+	0b001,	// Blue
+	0b101,	// Magenta
+	0b011,	// Cyan
+	0b111,	// White
+};
+
+static uint16_t cga_color_attr = 0x0700;
+
+
+// return zero if ansi sequence meet the end.
+static int cga_ansi_color(int ch){
+	static uint16_t attribute = 0;
+	static uint16_t ansi_code = 0;
+
+	if(ch == 'm' || ch==';'){
+		if(ansi_code == 0){								// all attributes off 
+			attribute = 0x0700;
+		}else if (30 <= ansi_code && ansi_code < 38){	// foreground colors
+			attribute |= (uint16_t)foreground_vgamap[ansi_code - 30] << 8;
+		}else if (40 <= ansi_code && ansi_code < 48){	// background colors
+			attribute |= (uint16_t)background_vgamap[ansi_code - 40] << 12;
+		}else{
+			assert(0);
+		}
+		ansi_code = 0;
+		if(ch == 'm'){
+			cga_color_attr = attribute;
+			attribute = 0;
+			return 0;
+		}
+	}else{
+		ansi_code = ansi_code * 10 + ch - '0';
+	}
+	return 1;
+}
+
+enum ansi_status{
+	ANSI_NONE,
+	ANSI_REDAY,
+	ANSI_PROCESS,
+};
+
+static int cga_ansi_check(int ch){
+	static enum ansi_status status = ANSI_NONE;
+	switch (status){
+		case ANSI_NONE:
+			if(ch == 0x1b){
+				status = ANSI_REDAY;
+				return 1;
+			}
+			return 0;
+		break;
+		case ANSI_REDAY:
+			if(ch == '['){
+				status = ANSI_PROCESS;
+				return 1;
+			}
+			status = ANSI_NONE;
+			return 0;
+		break;
+		case ANSI_PROCESS:
+			if(!cga_ansi_color(ch)){
+				status = ANSI_NONE;
+			}
+			return 1;
+		break;
+		default:
+			return 0;
+	}
+}
 
 static void
 cga_putc(int c)
 {
-	
-	c |= textcolor;
 
-	// if no attribute given, then use black on white
+	if(cga_ansi_check(c))
+		return;
+	
+	// if no attribute given
 	if (!(c & ~0xFF))
-		c |= 0x0700;
+		c |= cga_color_attr;
 	
 
 	switch (c & 0xff) {

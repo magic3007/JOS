@@ -38,6 +38,12 @@ i386_init(void)
 	// Test the stack backtrace function (lab 1 only)
 	test_backtrace(5);
 
+	// Test text color
+	cprintf("\x001b[30m A \x001b[31m B \x001b[32m C \x001b[33m D \x001b[34m E \x001b[35m F \x001b[36m G \x001b[37m H");
+	cprintf("\x001b[0m\n");
+	cprintf("\x001b[42;30m A \x001b[42;31m B \x001b[42;32m C \x001b[42;33m D \x001b[42;34m E \x001b[42;35m F \x001b[42;36m G \x001b[42;37m H");
+	cprintf("\x001b[0m\n");
+
 	// Drop into the kernel monitor.
 	while (1)
 		monitor(NULL);
