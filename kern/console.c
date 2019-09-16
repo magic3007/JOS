@@ -160,12 +160,10 @@ cga_init(void)
 
 /***** VGA displays ANSI Escape sequences *****/
 
-/**
+/*
  * Syntax of ANSI escape sequences: http://ascii-table.com/ansi-escape-sequences.php
- * 
- * Informations about CGA/VGA color display could been cited 
- * at https://pdos.csail.mit.edu/6.828/2008/readings/hardware/vgadoc/VGABIOS.TXT.
- * 
+ * Information about CGA/VGA color display could been 
+ * seen at https://pdos.csail.mit.edu/6.828/2008/readings/hardware/vgadoc/VGABIOS.TXT.
 */
 
 
