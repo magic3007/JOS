@@ -27,7 +27,7 @@ Jing Mai, 1700012751
 
 IBM modern PC's Physical Address Space:
 
-![1568218362809](C:\Users\maiji\AppData\Roaming\Typora\typora-user-images\1568218362809.png)
+![1568218362809](./pics/1568218362809.png)
 
 <u>Recent x86 processors</u> can support more than 4GB of physical RAM, so RAM can extend further above 0xFFFFFFFF. In this case the BIOS must arrange to leave a second hole in the system's RAM at the top of the 32-bit addressable region, to leave room for these 32-bit devices to be mapped.
 
@@ -735,7 +735,7 @@ i386_init(void)
 
 The final result is:
 
-![1568578419028](C:\Users\maiji\AppData\Roaming\Typora\typora-user-images\1568578419028.png)
+![1568578419028](./pics/1568578419028.png)
 
 ## Exercise 9
 
