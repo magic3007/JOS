@@ -80,6 +80,8 @@ In the conventional hard drive boot mechanism(which we use here), the boot loade
 - **Why 0x7c00**
   The magic number 0x7c00 is the result of interesting history reasons referring  to  [here](https://www.glamenv-septzen.net/en/view/6) .
   
+- **Why `ljmp    $PROT_MODE_CSEG, $protcseg`**
+  jump to relocation, flush prefetch queue, and reload `%cs`. See [Capter 10.3 INTEL 80386](https://pdos.csail.mit.edu/6.828/2018/readings/i386.pdf).
 
 Actually the boot loader consists of 2 source: `boot/boot.S` and `boot/main.c`
 
