@@ -59,7 +59,8 @@ What *BIOS* does is:
 
 ## Boot Loader
 
-
+ - **What A20 Address Line?**
+   $1M + 64KB$.
 - **What is the different between *BIOS*  and *boot loader*?**
 
 What *boot loader* does is:

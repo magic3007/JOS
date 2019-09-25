@@ -143,6 +143,7 @@
 typedef uint32_t pte_t;
 typedef uint32_t pde_t;
 
+
 #if JOS_USER
 /*
  * The page directory entry corresponding to the virtual address range
