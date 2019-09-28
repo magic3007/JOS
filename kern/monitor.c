@@ -6,10 +6,13 @@
 #include <inc/memlayout.h>
 #include <inc/assert.h>
 #include <inc/x86.h>
+#include <inc/types.h>
+#include <inc/memlayout.h>
 
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -25,6 +28,9 @@ static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace","Display a backtrace for the calling program", mon_backtrace },
+	{ "showmappings", "Display all of the physical page mappings given a particular range of virtual/linear addresses", mon_showmappings},
+	{ "setpageperm", "Explicitly set, clear, or change the permissions of any mapping in the current address space", mon_setpageperm},
+	{ "memdisp", "Display the contents of a range of memory given either a virtual or physical address range.", mon_memdisp}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -91,6 +97,103 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 }
 
 
+/***** Implementations of memory management commands *****/
+
+void printfperm(pte_t *pte){
+	cprintf("%c%c%c", (*pte & PTE_P)?'P':'-', (*pte & PTE_W)?'W':'-', (*pte & PTE_U)?'U':'-');
+}
+
+int
+mon_showmappings(int argc, char **argv, struct Trapframe *tf){
+	if(argc != 3){
+		cprintf("Format error. Usage: showmappings [hexadecimal begin_addr] [hexadecimal end_addr]\n");
+		return 0;
+	}
+	uintptr_t begin_addr = strtol(argv[1], NULL, 16), end_addr = strtol(argv[2], NULL, 16);
+	if(begin_addr>=end_addr){
+		cprintf("begin address shoule less than end address.");
+		return 0;
+	}
+	pde_t *pgdir = KADDR(rcr3());
+	for(uintptr_t va = begin_addr; va < end_addr; va+=PGSIZE) {
+		pte_t *pte = pgdir_walk(pgdir, (const void *)va, 0);
+		if(pte && (*pte & PTE_P)){ // page mapping exists
+			physaddr_t pa = PTE_ADDR(*pte);
+			cprintf("va:%08p-%08p\tpa:%08p-%08p\t", va, va +PGSIZE - 1, pa, pa + PGSIZE - 1);
+			printfperm(pte);
+			cprintf("\n");
+		}else
+			cprintf("va:%08p-%08p page mapping does not exist.\n", va, va +PGSIZE - 1);
+	}
+	return 0;
+}
+
+int
+mon_setpageperm(int argc, char **argv, struct Trapframe *tf){
+	if(argc != 4 || !(strcmp(argv[2], "clear")==0 || strcmp(argv[2], "set")==0)){
+		cprintf("Format error. Usage: setpageperm [hexadecimal address] [clear|set] [W|U]\n");
+		return 0;
+	}
+	uintptr_t va = strtol(argv[1], NULL, 16);
+	pde_t *pgdir = KADDR(rcr3());
+	pte_t *pte = pgdir_walk(pgdir, (const char*)va, 0);
+	if(pte && (*pte & PTE_P)){
+		uint16_t perm;
+		switch (argv[3][0]) {
+			case 'W': perm = PTE_W; break;
+			case 'U': perm = PTE_U; break;
+			default: perm = 0;
+		}
+		cprintf("change va:%08p-%08p page mapping permissions.\n", va, va+PGSIZE-1);
+		cprintf("\tBefore: ");
+		printfperm(pte);
+		cprintf("\n");
+		if(strcmp(argv[2], "clear")==0)
+			*pte = *pte & ~perm;
+		else if (strcmp(argv[2], "set")==0)
+			*pte = *pte | perm;
+		cprintf("\tAfter:  ");
+		printfperm(pte);
+		cprintf("\n");
+	}else
+		cprintf("va:%08p-%08p page mapping does not exist.\n", va, va + PGSIZE - 1);
+	return 0;
+}
+
+int
+mon_memdisp(int argc, char **argv, struct Trapframe *tf){
+	if(argc!=4){
+mon_memdisp_format_error:
+		cprintf("Format error. Usage: memdump [P|V: physical address or virtual address] [hexadecimal begin_addr] [hexadecimal end_addr]\n");
+		return 0;
+	}
+	uintptr_t begin_addr = strtol(argv[2], NULL, 16), end_addr = strtol(argv[3], NULL, 16);
+	if(begin_addr>=end_addr){
+		cprintf("begin address shoule be less than end address.\n");
+		return 0;
+	}
+	pde_t *pgdir = KADDR(rcr3());
+	if(strcmp(argv[1], "V") == 0){
+		for(uintptr_t va = begin_addr; va < end_addr; va++){
+			pte_t* pte = pgdir_walk(pgdir, (const void*)va, 0);
+			if (pte && (*pte & PTE_P))
+				cprintf("va: %08p\tcontent: %2x\n", va, *(unsigned char*)va);
+			else
+				cprintf("va: %08p\tMapping does not exist.\n", va);
+		}
+    }else if(strcmp(argv[1], "P") == 0){
+		for(physaddr_t pa = begin_addr; pa < end_addr; pa++){
+			void *va = KADDR(pa);
+			pte_t* pte = pgdir_walk(pgdir, va, 0); // use page tablee to determine whether the physical address exists.
+			if (!pte)
+				cprintf("pa: %08p\tPhysical address does not exist.\n", pa);
+			else
+				cprintf("pa: %08p\tcontent: %2x\n", pa, *(unsigned char*)va);
+		}
+	}else
+		goto mon_memdisp_format_error;
+	return 0;
+}
 
 /***** Kernel monitor command interpreter *****/
 
@@ -144,6 +247,20 @@ monitor(struct Trapframe *tf)
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
 
+	
+	// Test text color
+	cprintf("\x001b[30m A \x001b[31m B \x001b[32m C \x001b[33m D \x001b[34m E \x001b[35m F \x001b[36m G \x001b[37m H");
+	cprintf("\x001b[0m\n");
+	cprintf("\x001b[42;30m A \x001b[42;31m B \x001b[42;32m C \x001b[42;33m D \x001b[42;34m E \x001b[42;35m F \x001b[42;36m G \x001b[42;37m H");
+	cprintf("\x001b[0m\n");
+
+	// Test showmappings
+	runcmd("setpageperm 0xf0000000 set U", tf);
+	runcmd("showmappings 0xEFFFC000 0xf0010000", tf);
+	runcmd("memdisp V 0xf0000000 0xf0000010", tf);
+	runcmd("memdisp P 0x00000000 0x00000010", tf);
+	
+	
 	while (1) {
 		buf = readline("K> ");
 		if (buf != NULL)

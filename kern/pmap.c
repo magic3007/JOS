@@ -190,8 +190,11 @@ mem_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 
+	// the new image at UPAGES -- kernel R, user R
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U | PTE_P);	
+
 	//////////////////////////////////////////////////////////////////////
-	// Use the physical memory that 'bootstack' refers to as the kernel
+	// Use the physical memory that 'bootstack' refers to as the kernel	
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
 	// We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
 	// to be the kernel stack, but break this into two pieces:
@@ -202,6 +205,10 @@ mem_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
+	// [KSTACKTOP-KSTKSIZE, KSTACKTOP) -- backed by physical memory
+	// Permissions: kernel RW, user NONE
+	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
+
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -210,6 +217,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, KERNBASE, ((uint64_t)1<<32) - KERNBASE, 0, PTE_W);
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -302,10 +310,8 @@ struct PageInfo *
 page_alloc(int alloc_flags)
 {	
 
-	if(!page_free_list){
-		cprintf("out of free memory\n");
+	if(!page_free_list)
 		return NULL;
-	}
 
 	struct PageInfo *page_ptr = page_free_list;
 	page_free_list = page_ptr -> pp_link;
@@ -384,6 +390,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 
 		// Otherwise, pgdir_walk allocates a new page table page with page_alloc.
 		// If the allocation fails, pgdir_walk returns NULL.
+		// The new page is cleared.
 		struct PageInfo *pgtbl_page;
 		if(!(pgtbl_page = page_alloc(ALLOC_ZERO)))
 			return NULL;
@@ -391,7 +398,8 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		// create a page table
 		pgtbl_page->pp_ref++;
 
-		// it's safe to leave permissions in the page directory more permissive than strictly necessary.
+		// it's safe to leave permissions in the page directory more permissive 
+		// than strictly necessary.
 		pgdir[PDX(va)] = page2pa(pgtbl_page) | PTE_P | PTE_U | PTE_W;
 		
 		// reassign after creating a new page table
@@ -426,7 +434,6 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 
 		*pte = (pa + i) | perm | PTE_P;
 	}
-
 }
 
 //
@@ -474,17 +481,6 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	
 	*pte = page2pa(pp) | perm | PTE_P;
 	
-	return 0;
-		
-
-	
-	
-
-
-	*pte = page2pa(pp) | perm | PTE_P;
-
-	pp->pp_ref++; 
-
 	return 0;
 }
 
