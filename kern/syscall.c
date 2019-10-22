@@ -11,6 +11,14 @@
 #include <kern/syscall.h>
 #include <kern/console.h>
 
+
+// Returns the current environment's envid.
+static envid_t
+sys_getenvid(void)
+{
+	return curenv->env_id;
+}
+
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
 // Destroys the environment on memory errors.
@@ -21,25 +29,23 @@ sys_cputs(const char *s, size_t len)
 	// Destroy the environment if not.
 
 	// LAB 3: Your code here.
-
+	struct Env *e;
+	envid2env(sys_getenvid(), &e, 1);
+	user_mem_assert(e, s, len, PTE_U);
+	
 	// Print the string supplied by the user.
 	cprintf("%.*s", len, s);
 }
 
 // Read a character from the system console without blocking.
 // Returns the character, or 0 if there is no input waiting.
-static int
+static int	
 sys_cgetc(void)
 {
 	return cons_getc();
 }
 
-// Returns the current environment's envid.
-static envid_t
-sys_getenvid(void)
-{
-	return curenv->env_id;
-}
+
 
 // Destroy a given environment (possibly the currently running environment).
 //
@@ -69,12 +75,28 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	// Call the function corresponding to the 'syscallno' parameter.
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
-
-	panic("syscall not implemented");
-
+	int ret = 0;
+	
 	switch (syscallno) {
-	default:
-		return -E_INVAL;
+	case SYS_cputs: 
+			sys_cputs((char*)a1, a2);
+			ret = 0;
+			break;
+		case SYS_cgetc:
+			ret = sys_cgetc();
+			break;
+		case SYS_getenvid:
+			ret = sys_getenvid();
+			break;
+		case SYS_env_destroy:
+			ret = sys_env_destroy(a1);
+			break;
+		default:
+			ret = -E_INVAL;
 	}
+
+	// panic("syscall not implemented");
+	return ret;
+	
 }
 

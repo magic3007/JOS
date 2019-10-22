@@ -602,10 +602,20 @@ static uintptr_t user_mem_check_addr;
 // and -E_FAULT otherwise.
 //
 int
-user_mem_check(struct Env *env, const void *va, size_t len, int perm)
-{
+user_mem_check(struct Env *env, const void *va, size_t len, int perm){
 	// LAB 3: Your code here.
+	uintptr_t begin,end;
 
+	begin = (uintptr_t)ROUNDDOWN(va, PGSIZE); 
+	end = (uintptr_t)ROUNDUP(va+len, PGSIZE);
+
+	for (uintptr_t i = begin; i < end; i+=PGSIZE) {
+		pte_t *pte = pgdir_walk(env->env_pgdir, (void*)i, 0);
+		if ((i>=ULIM) || !pte || !(*pte & PTE_P) || ((*pte & perm) != perm)) {
+			user_mem_check_addr = i<(uintptr_t)va ? (uintptr_t)va : i;
+			return -E_FAULT;
+		}
+	}
 	return 0;
 }
 

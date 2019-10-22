@@ -65,58 +65,60 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-	extern void INT_HANDLER_0();
-	extern void INT_HANDLER_1();
-	extern void INT_HANDLER_2();
-	extern void INT_HANDLER_3();
-	extern void INT_HANDLER_4();
-	extern void INT_HANDLER_5();
-	extern void INT_HANDLER_6();
-	extern void INT_HANDLER_7();
-	extern void INT_HANDLER_8();
-	extern void INT_HANDLER_10();
-	extern void INT_HANDLER_11();
-	extern void INT_HANDLER_12();
-	extern void INT_HANDLER_13();
-	extern void INT_HANDLER_14();
-	extern void INT_HANDLER_16();
-	extern void INT_HANDLER_17();
-	extern void INT_HANDLER_18();
-	extern void INT_HANDLER_19();
-	extern void INT_HANDLER_48();
+	// extern void INT_HANDLER_0();
+	// extern void INT_HANDLER_1();
+	// extern void INT_HANDLER_2();
+	// extern void INT_HANDLER_3();
+	// extern void INT_HANDLER_4();
+	// extern void INT_HANDLER_5();
+	// extern void INT_HANDLER_6();
+	// extern void INT_HANDLER_7();
+	// extern void INT_HANDLER_8();
+	// extern void INT_HANDLER_10();
+	// extern void INT_HANDLER_11();
+	// extern void INT_HANDLER_12();
+	// extern void INT_HANDLER_13();
+	// extern void INT_HANDLER_14();
+	// extern void INT_HANDLER_16();
+	// extern void INT_HANDLER_17();
+	// extern void INT_HANDLER_18();
+	// extern void INT_HANDLER_19();
+	// extern void INT_HANDLER_48();
 
 
-	SETGATE(idt[0], 0, GD_KT, INT_HANDLER_0, 0);
-	SETGATE(idt[1], 0, GD_KT, INT_HANDLER_1, 0);
-	SETGATE(idt[2], 0, GD_KT, INT_HANDLER_2, 0);
-	SETGATE(idt[3], 0, GD_KT, INT_HANDLER_3, 0);
-	SETGATE(idt[4], 0, GD_KT, INT_HANDLER_4, 0);
-	SETGATE(idt[5], 0, GD_KT, INT_HANDLER_5, 0);
-	SETGATE(idt[6], 0, GD_KT, INT_HANDLER_6, 0);
-	SETGATE(idt[7], 0, GD_KT, INT_HANDLER_7, 0);
-	SETGATE(idt[8], 0, GD_KT, INT_HANDLER_8, 0);
+	// SETGATE(idt[0], 0, GD_KT, INT_HANDLER_0, 0);
+	// SETGATE(idt[1], 0, GD_KT, INT_HANDLER_1, 0);
+	// SETGATE(idt[2], 0, GD_KT, INT_HANDLER_2, 0);
+	// SETGATE(idt[3], 0, GD_KT, INT_HANDLER_3, 0);
+	// SETGATE(idt[4], 0, GD_KT, INT_HANDLER_4, 0);
+	// SETGATE(idt[5], 0, GD_KT, INT_HANDLER_5, 0);
+	// SETGATE(idt[6], 0, GD_KT, INT_HANDLER_6, 0);
+	// SETGATE(idt[7], 0, GD_KT, INT_HANDLER_7, 0);
+	// SETGATE(idt[8], 0, GD_KT, INT_HANDLER_8, 0);
 
-	SETGATE(idt[10], 0, GD_KT, INT_HANDLER_10, 0);
-	SETGATE(idt[11], 0, GD_KT, INT_HANDLER_11, 0);
-	SETGATE(idt[12], 0, GD_KT, INT_HANDLER_12, 0);
-	SETGATE(idt[13], 0, GD_KT, INT_HANDLER_13, 0);
-	SETGATE(idt[14], 0, GD_KT, INT_HANDLER_14, 0);
+	// SETGATE(idt[10], 0, GD_KT, INT_HANDLER_10, 0);
+	// SETGATE(idt[11], 0, GD_KT, INT_HANDLER_11, 0);
+	// SETGATE(idt[12], 0, GD_KT, INT_HANDLER_12, 0);
+	// SETGATE(idt[13], 0, GD_KT, INT_HANDLER_13, 0);
+	// SETGATE(idt[14], 0, GD_KT, INT_HANDLER_14, 0);
 	
-	SETGATE(idt[16], 0, GD_KT, INT_HANDLER_16, 0);
-	SETGATE(idt[17], 0, GD_KT, INT_HANDLER_17, 0);
-	SETGATE(idt[18], 0, GD_KT, INT_HANDLER_18, 0);
-	SETGATE(idt[19], 0, GD_KT, INT_HANDLER_19, 0);
+	// SETGATE(idt[16], 0, GD_KT, INT_HANDLER_16, 0);
+	// SETGATE(idt[17], 0, GD_KT, INT_HANDLER_17, 0);
+	// SETGATE(idt[18], 0, GD_KT, INT_HANDLER_18, 0);
+	// SETGATE(idt[19], 0, GD_KT, INT_HANDLER_19, 0);
 
-	SETGATE(idt[48], 1, GD_KT, INT_HANDLER_48, 3);
+	// SETGATE(idt[48], 1, GD_KT, INT_HANDLER_48, 3);
 
-	// typedef void (*int_fun_t)();
-	// extern int_fun_t int_funs[];
+	typedef void (*int_fun_t)();
+	extern int_fun_t int_funs[];
 
-	// for(int i = 0; i <=19; i++)
-	// 	if(i!=9 && i!=15)
-	// 		SETGATE(idt[i], 0, GD_KT, int_funs[i], 0);
+	for(int i = 0; i <=19; i++)
+		if(i==T_BRKPT){
+			SETGATE(idt[i], 1, GD_KT, int_funs[i], 3);
+		}else if(i!=9 && i!=15)
+			SETGATE(idt[i], 0, GD_KT, int_funs[i], 0);
 
-	// SETGATE(idt[T_SYSCALL], 1, GD_KT, int_funs[T_SYSCALL], 3);
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, int_funs[T_SYSCALL], 3);
 	
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -192,11 +194,25 @@ print_regs(struct PushRegs *regs)
 }
 
 static void
-trap_dispatch(struct Trapframe *tf)
-{
+trap_dispatch(struct Trapframe *tf){
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-
+	switch (tf->tf_trapno){
+		case T_PGFLT:
+			page_fault_handler(tf);
+			return;
+		case T_BRKPT:
+			monitor(tf);
+			return;
+		case T_SYSCALL:
+			tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, 
+				tf->tf_regs.reg_edx, 
+				tf->tf_regs.reg_ecx,
+				tf->tf_regs.reg_ebx, 
+				tf->tf_regs.reg_edi, 
+				tf->tf_regs.reg_esi);
+			return;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -257,7 +273,9 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-
+	if ((tf->tf_cs&3) == 0)
+		panic("Kernel page fault!");
+	
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
