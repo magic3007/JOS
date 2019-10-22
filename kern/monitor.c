@@ -12,10 +12,7 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
-<<<<<<< HEAD
 #include <kern/pmap.h>
-=======
->>>>>>> mit/lab3
 #include <kern/trap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
@@ -262,10 +259,10 @@ monitor(struct Trapframe *tf)
 		print_trapframe(tf);
 
 	// Test showmappings
-	runcmd("setpageperm 0xf0000000 set U", tf);
-	runcmd("showmappings 0xEFFFC000 0xf0010000", tf);
-	runcmd("memdisp V 0xf0000000 0xf0000010", tf);
-	runcmd("memdisp P 0x00000000 0x00000010", tf);
+	// runcmd("setpageperm 0xf0000000 set U", tf);
+	// runcmd("showmappings 0xEFFFC000 0xf0010000", tf);
+	// runcmd("memdisp V 0xf0000000 0xf0000010", tf);
+	// runcmd("memdisp P 0x00000000 0x00000010", tf);
 	
 	
 	while (1) {
