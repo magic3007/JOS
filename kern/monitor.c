@@ -13,6 +13,7 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <kern/pmap.h>
+#include <kern/trap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -253,6 +254,9 @@ monitor(struct Trapframe *tf)
 	cprintf("\x001b[0m\n");
 	cprintf("\x001b[42;30m A \x001b[42;31m B \x001b[42;32m C \x001b[42;33m D \x001b[42;34m E \x001b[42;35m F \x001b[42;36m G \x001b[42;37m H");
 	cprintf("\x001b[0m\n");
+	
+	if (tf != NULL)
+		print_trapframe(tf);
 
 	// Test showmappings
 	runcmd("setpageperm 0xf0000000 set U", tf);
