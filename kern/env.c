@@ -191,14 +191,6 @@ env_setup_vm(struct Env *e)
 	e->env_pgdir = (pte_t *)page2kva(p);
 
 	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
-
-	// // user premissions: R-
-	// for(size_t i = PDX(UTOP); i < PDX(ULIM); i++)
-	// 	e->env_pgdir[i] = (kern_pgdir[i] & ~0x3FF) | PTE_U | PTE_P;
-
-	// // user permissions: --
-	// for(size_t i = PDX(ULIM); i < NPDENTRIES; i++)
-	// 	e->env_pgdir[i] = (kern_pgdir[i] & ~0x3FF) | PTE_P;
 	
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -542,14 +534,12 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 	
-	if (e->env_status == ENV_RUNNING)
-		e->env_status = ENV_RUNNABLE;
+	if(curenv && curenv->env_status == ENV_RUNNING)
+		curenv->env_status = ENV_RUNNABLE;
 	curenv = e;
-	e->env_status = ENV_RUNNING;
-	e->env_runs++;
+	curenv->env_status = ENV_RUNNING;
+	curenv->env_runs++;
 	lcr3(PADDR(e->env_pgdir));
-	env_pop_tf(&e->env_tf);
-	// panic("env_run not yet implemented");
-	
+	env_pop_tf(&e->env_tf);	
 }
 

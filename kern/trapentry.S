@@ -46,16 +46,22 @@
  */
 
 _alltraps:
+	/* push %ds and %es register on kernel stack */
 	pushl %ds;
 	pushl %es;
+
+	/* push all general-purpose registers */
 	pushal;
 	
+	/* assign %ds and %es to kernel data segment selector */
 	movl $GD_KD, %eax;
 	movw %ax, %ds;
 	movw %ax, %es;
-
+	
+	/* pass a pointer to the Trapframe as an argument to trap() */
 	pushl %esp
-
+	
+    /* call trap() and never return */
 	call trap
 
 /*
@@ -94,9 +100,6 @@ _alltraps:
 	.global int_funs;
 int_funs:
 
-/*
- * Lab 3: Your code here for generating entry points for the different traps.
- */
 
 TRAPHANDLER_NOEC(INT_HANDLER_0, T_DIVIDE)
 TRAPHANDLER_NOEC(INT_HANDLER_1, T_DEBUG)
