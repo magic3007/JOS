@@ -182,7 +182,7 @@ static uint8_t background_vgamap[]={
 	0b000,	// Black
 	0b100,	// Red
 	0b010,	// Green
-	0b110,	// TODO: doesn't support 'yellow', use 'brown' instead.
+	0b110,	// NOTE: doesn't support 'yellow', use 'brown' instead.
 	0b001,	// Blue
 	0b101,	// Magenta
 	0b011,	// Cyan

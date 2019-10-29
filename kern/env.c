@@ -133,6 +133,9 @@ env_init_percpu(void)
 	lgdt(&gdt_pd);
 	// The kernel never uses GS or FS, so we leave those set to
 	// the user data segment.
+	// FS: File Segment
+	// GS: Graphics Segment
+	// usage of "|3": user-mode
 	asm volatile("movw %%ax,%%gs" : : "a" (GD_UD|3));
 	asm volatile("movw %%ax,%%fs" : : "a" (GD_UD|3));
 	// The kernel does use ES, DS, and SS.  We'll change between
@@ -222,6 +225,10 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 		return r;
 
 	// Generate an env_id for this environment.
+	/*
+	* [0, LOGNENV): e-envs
+	* [ENVGENSHIFT, 32): identical to the number of times currently used 
+	*/
 	generation = (e->env_id + (1 << ENVGENSHIFT)) & ~(NENV - 1);
 	if (generation <= 0)	// Don't create a negative env_id.
 		generation = 1 << ENVGENSHIFT;

@@ -390,6 +390,21 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 }
 ```
 
+### UVPT & UVPD
+
+In JOS, the page directory is the `0x3BD` in virtual memory.
+
+- `UVPT = 0x3BD<<22=0xEF400000`
+
+- `UVPD=(0x3BD<<22 | 0x3BD<<12)=UVPT | (UVPT>>10) = ‭0xEF40EF40000‬`
+- What is the physical address of page directory?
+  - The virtual address that contains page directory's physical address is `0xef7bdef4 = [PDX(UVPT), PDX(UVPT), PDX(UVPT), 00] = UVPT + (UVPT >> 10) + (UVPT >> 20)`
+- What is the physical address of page directory of `va`?
+  - The virtual address the contains `va`'s physical address in page directory is `[PDX(UVPT), PDX(UVPT), PDX(va), 00]`
+  - i.e. `[PGNUM(UVPD), PDX(va), 00]`
+- What is the physical address of page table of `va`?
+  - The virtual address the contains `va`'s physical address in page table is `[PDX(UVPT), PDX(va), PTX(va),00]`
+
 # Part 3: Kernel Address Space
 
 > **Exercise 5.** Fill in the missing code in `mem_init()` after the call to `check_page()`.
