@@ -404,7 +404,8 @@ In JOS, the page directory is the `0x3BD` in virtual memory.
   - i.e. `[PGNUM(UVPD), PDX(va), 00]`
 - What is the physical address of page table of `va`?
   - The virtual address the contains `va`'s physical address in page table is `[PDX(UVPT), PDX(va), PTX(va),00]`
-
+- The PTE for page number N is stored in `uvpt[N]`
+- The PDE for the Nth entry in page directory is `uvpd[N]`
 # Part 3: Kernel Address Space
 
 > **Exercise 5.** Fill in the missing code in `mem_init()` after the call to `check_page()`.
