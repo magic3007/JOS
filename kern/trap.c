@@ -126,18 +126,22 @@ trap_init_percpu(void)
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	ts.ts_esp0 = KSTACKTOP;
-	ts.ts_ss0 = GD_KD;
-	ts.ts_iomb = sizeof(struct Taskstate);
+	int i;
+
+	i = cpunum();
+
+	thiscpu->cpu_ts.ts_esp0 =  KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+	thiscpu->cpu_ts.ts_ss0 = GD_KD;
+	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
 
 	// Initialize the TSS slot of the gdt.
-	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
+	gdt[(GD_TSS0 >> 3) + i] = SEG16(STS_T32A, (uint32_t) (&thiscpu->cpu_ts),
 					sizeof(struct Taskstate) - 1, 0);
-	gdt[GD_TSS0 >> 3].sd_s = 0;
+	gdt[(GD_TSS0 >> 3) + i].sd_s = 0;
 
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0);
+	ltr(GD_TSS0 + (i<<3));
 
 	// Load the IDT
 	lidt(&idt_pd);
@@ -193,7 +197,6 @@ static void
 trap_dispatch(struct Trapframe *tf){
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-	print_trapframe(tf);
 	switch (tf->tf_trapno){
 		case T_PGFLT:
 			page_fault_handler(tf);
@@ -261,6 +264,7 @@ trap(struct Trapframe *tf)
 		// serious kernel work.
 		// LAB 4: Your code here.
 		assert(curenv);
+		lock_kernel();
 
 		// Garbage collect if current enviroment is a zombie
 		if (curenv->env_status == ENV_DYING) {
@@ -341,7 +345,60 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	struct UTrapframe* utrapframe = NULL;
+	
+	/* 
+	* If the environment's page fault upcall doesn't exist, 
+	* go to destroy this environment.
+	*/
+	if(!curenv->env_pgfault_upcall){
+		cprintf("Page fault upcall doesn't exist!.\n");
+		goto done;
+	}
 
+	/*
+	* If this page fault happens just within the user exception stack,
+	* go to destroy this environment.
+	*/
+	if(UXSTACKTOP - PGSIZE <= fault_va  && fault_va < UXSTACKTOP){
+		cprintf("Page fault happens within the user exception stack.\n");
+		goto done;
+	}
+
+	/* 
+	* the location of new Utrapframe depends on whether 
+	* this page fault happens during trap-time state.
+	* 
+	* In the recursive case, we have to leave an extra word 
+	* between the current top of the exception stack.
+	*/
+	if((curenv->env_tf.tf_esp < UXSTACKTOP) && (curenv->env_tf.tf_esp >= UXSTACKTOP - PGSIZE))
+		utrapframe = (struct UTrapframe*)(curenv->env_tf.tf_esp - 4 - sizeof(struct UTrapframe));
+	else
+		utrapframe = (struct UTrapframe*)(UXSTACKTOP - sizeof(struct UTrapframe));
+	
+	/*
+	* if the exception stack overflows, destroy this environment.
+	*/
+	user_mem_assert(curenv, utrapframe, sizeof(struct UTrapframe), PTE_W);
+
+	utrapframe->utf_esp = curenv->env_tf.tf_esp;
+	utrapframe->utf_eflags = curenv->env_tf.tf_eflags;
+	utrapframe->utf_eip = curenv->env_tf.tf_eip;
+	utrapframe->utf_regs = curenv->env_tf.tf_regs;
+	utrapframe->utf_err = curenv->env_tf.tf_err;
+	utrapframe->utf_fault_va = fault_va;
+	
+	/*
+	* Modify the eip and esp of `curenv->env_tf`, so as to trap 
+	* into user-level page fault upcall by `env_run`
+	*/
+	curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+	curenv->env_tf.tf_esp = (uintptr_t)utrapframe;
+
+	env_run(curenv); // never return
+
+done:
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 		curenv->env_id, fault_va, tf->tf_eip);

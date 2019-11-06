@@ -290,7 +290,7 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-	for(int i = 0; i < ncpu; i++){
+	for(int i = 0; i < NCPU; i++){
 		uintptr_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
 		boot_map_region(kern_pgdir, kstacktop_i - KSTKSIZE, KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W);
 	}
@@ -533,7 +533,7 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	// that pp is freed before it is inserted.
 	pp->pp_ref++;
 
-	// If there is already a page mapped at 'va', it should be page_remove()d.
+	// If there is already a page mapped at 'va', it should be page_remove().
 	if (*pte & PTE_P)
 		page_remove(pgdir, va);
 	
