@@ -478,6 +478,10 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 > 	1006: I am '101'
 > ```
 
+
+
+
+
 ## Part C: Preemptive Multitasking and Inter-Process communication (IPC)
 
 > **Exercise 13.** Modify `kern/trapentry.S` and `kern/trap.c` to initialize the appropriate entries in the IDT and provide handlers for IRQs 0 through 15. Then modify the code in `env_alloc()` in `kern/env.c` to ensure that user environments are always run with interrupts enabled.

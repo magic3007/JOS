@@ -177,7 +177,6 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	//   allocated!
 
 	// LAB 4: Your code here.
-	// panic("sys_page_alloc not implemented");
 	int rc;
 	struct Env *env;
 	uintptr_t va_addr = (uintptr_t)va;
