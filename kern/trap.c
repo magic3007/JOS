@@ -84,12 +84,12 @@ trap_init(void)
 	
 	for(int i = 0; i <=19; i++)if(i!=9 && i!=15){
 		if(i==T_BRKPT || i==T_DEBUG){
-			SETGATE(idt[i], 1, GD_KT, int_funs[i], 3);
+			SETGATE(idt[i], 0, GD_KT, int_funs[i], 3);
 		}else{
-			SETGATE(idt[i], 1, GD_KT, int_funs[i], 0);
+			SETGATE(idt[i], 0, GD_KT, int_funs[i], 0);
 		}
 	}
-	SETGATE(idt[T_SYSCALL], 1, GD_KT, int_funs[T_SYSCALL], 3);
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, int_funs[T_SYSCALL], 3);
 	
 	// Per-CPU setup 
 	trap_init_percpu();

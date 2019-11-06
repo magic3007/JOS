@@ -478,9 +478,154 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 > 	1006: I am '101'
 > ```
 
+### Page Table Self Mapping
 
+`UVPT` and `UVPD` is a trick named *Page Table Self Mapping*. In JOS, the page directory is the `0x3BD` in virtual memory.
 
+- `UVPT = 0x3BD<<22=0xEF400000`
 
+- `UVPD=(0x3BD<<22 | 0x3BD<<12)=UVPT | (UVPT>>10) = ‭0xEF40EF40000‬`
+- What is the physical address of page directory?
+  - The virtual address that contains page directory's physical address is `0xef7bdef4 = [PDX(UVPT), PDX(UVPT), PDX(UVPT), 00] = UVPT + (UVPT >> 10) + (UVPT >> 20)`
+- What is the physical address of page directory of `va`?
+  - The virtual address the contains `va`'s physical address in page directory is `[PDX(UVPT), PDX(UVPT), PDX(va), 00]`
+  - i.e. `[PGNUM(UVPD), PDX(va), 00]`
+- What is the physical address of page table of `va`?
+  - The virtual address the contains `va`'s physical address in page table is `[PDX(UVPT), PDX(va), PTX(va),00]`
+- The PTE for page number N is stored in `uvpt[N]`
+- The PDE for the Nth entry in page directory is `uvpd[N]`
+
+In `lib/fork.c:pgfault`, firstly we check that the faulting access was a write, and is to a copy-on-write page. Only under this situation could we copy this page. Then we allocate a new page, map it at PFTEMP, and remap the allocated page to the old page's address.
+
+```c
+static void pgfault(struct UTrapframe *utf)
+{
+	void *addr = (void *) utf->utf_fault_va;
+	uint32_t err = utf->utf_err;
+	int r;
+	pte_t pte;
+	int rc;
+	
+	// Check that the faulting access was (1) a write, and (2) to a
+	// copy-on-write page.  If not, panic.
+	// Hint:
+	//   Use the read-only page table mappings at uvpt
+	//   (see <inc/memlayout.h>).
+	pte = uvpt[PGNUM(addr)];
+	if(!(FEC_WR & err))
+		panic("In pgfault: the faulting access is not a write.");
+	if(!(pte & PTE_COW))
+		panic("In pgfault: the faulting access is not to a copy-on-write page.");
+	
+	// Allocate a new page, map it at a temporary location (PFTEMP),
+	// copy the data from the old page to the new page, then move the new
+	// page to the old page's address.
+	// Hint:
+	//   You should make three system calls.
+
+	// allocate a new page, map it at PFTEMP
+	if((rc = sys_page_alloc(0, PFTEMP, PTE_P | PTE_U | PTE_W)) < 0)
+		panic("In pgfault: sys_page_alloc error. %e", rc);
+
+	// copy the data from the old page to the new page
+	memcpy(PFTEMP, ROUNDDOWN(addr, PGSIZE), PGSIZE);
+
+	// remap the allocated page to the old page's address
+    // decrease the reference counter instead of directly free it.
+	if((rc = sys_page_map(0, PFTEMP, 0, 
+		ROUNDDOWN(addr, PGSIZE), PTE_P | PTE_U | PTE_W))<0)
+			panic("In pgfault: sys_page_map error. %e", rc);
+
+}
+```
+
+In `lib/fork.c:duppage`, map our virtual page into the target environment. If the page is writable or copy-on-write, the new mapping must be created copy-on-write, and then our mapping must be marked copy-on-write as well. 
+
+The reason why do we need to mark ours copy-on-write again if it was already copy-on-write is that 
+
+Meanwhile, we should map the page copy-on-write into the address space of the child and then *remap* the page copy-on-write in its own address space. The order is significant.  Notice that `sys_page_map` will call `page_remove` after several calls to give up exciting mapping, which will decrease the reference counter of the old page. However, If we map the page copy-on-write into the address space of the parent firstly and the reference counter of this page is 1, this old page will be free. Thus we need to increase the reference counter of this page by mapping the page copy-on-write into the address space of the child firstly.
+
+```c
+static int cduppage(envid_t envid, unsigned pn){
+	int r;
+	pte_t pte;
+	void *addr  = (void*)(pn << PGSHIFT);
+
+	pte = uvpt[pn];
+	if((pte & PTE_W) || (pte & PTE_COW)){
+		if((r = sys_page_map(0, addr, envid, addr, PTE_U | PTE_P | PTE_COW))<0)
+			return r;
+		if((r = sys_page_map(0, addr, 0, addr, PTE_U | PTE_P | PTE_COW))<0)
+			return r;
+	}
+	else{
+		if((r = sys_page_map(0, addr, envid, addr, PTE_U | PTE_P))<0)
+			return r;
+	}
+	return 0;
+}
+```
+
+In `lib/fork.c:fork`, for each writable or copy-on-write page in its address space below UTOP, the parent map the page copy-on-write into the address space of the child. Both the page fault upcall and the page fault handler which is called by page fault upcall are both in the form of function pointer, thus we can simply copy the function pointer of page fault upcall in `envs[]` arrays. 
+
+```c
+envid_t fork(void){
+    
+	int rc = -1;
+	envid_t envid;
+	int pdi, pti, pn;
+
+	// Set up our page fault handler
+	set_pgfault_handler(pgfault);
+
+	// Create a child.
+	if((envid = sys_exofork()) < 0) return envid;
+	
+	// children environment
+	if(envid==0){
+		// fix thisenv
+		thisenv=&envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	// Copy parent's address space
+	for(pdi = 0; pdi < PDX(UTOP); pdi++){
+		if(!(uvpd[pdi] & PTE_P))
+			continue;
+		for(pti = 0; pti < NPDENTRIES; pti++){
+
+			// page index
+			pn = (pdi << 10) + pti;
+
+			// user exception stack should ever be marked copy-on-write
+			if(pn == PGNUM(UXSTACKTOP  - PGSIZE)){
+				if((rc = sys_page_alloc(envid, (void*)(pn * PGSIZE), 
+					PTE_P | PTE_U | PTE_W)) < 0)
+						goto destroy;
+				continue;
+			}
+
+			if(uvpt[pn] & PTE_P)
+				if((rc = duppage(envid, pn))<0) goto destroy;
+		}
+	}
+	
+	// copy our page fault upcall to child.
+	if((rc = sys_env_set_pgfault_upcall(envid, thisenv->env_pgfault_upcall)) < 0)
+		goto destroy;
+	
+	// mark the child as runnable
+	if((rc =sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
+		goto destroy;
+
+	rc = envid;
+	goto done;
+destroy:
+	sys_env_destroy(envid);
+done:
+	return rc;
+}
+```
 
 ## Part C: Preemptive Multitasking and Inter-Process communication (IPC)
 
@@ -491,8 +636,6 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 > The processor never pushes an error code when invoking a hardware interrupt handler. You might want to re-read section 9.2 of the [80386 Reference Manual](https://pdos.csail.mit.edu/6.828/2018/readings/i386/toc.htm), or section 5.8 of the[IA-32 Intel Architecture Software Developer's Manual, Volume 3](https://pdos.csail.mit.edu/6.828/2018/readings/ia32/IA32-3A.pdf), at this time.
 >
 > After doing this exercise, if you run your kernel with any test program that runs for a non-trivial length of time (e.g., `spin`), you should see the kernel print trap frames for hardware interrupts. While interrupts are now enabled in the processor, JOS isn't yet handling them, so you should see it misattribute each interrupt to the currently running user environment and destroy it. Eventually it should run out of environments to destroy and drop into the monitor.
-
-
 
 
 
@@ -509,4 +652,14 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 > Then implement the `ipc_recv` and `ipc_send` functions in `lib/ipc.c`.
 >
 > Use the `user/pingpong` and `user/primes` functions to test your IPC mechanism. `user/primes` will generate for each prime number a new environment until JOS runs out of environments. You might find it interesting to read `user/primes.c` to see all the forking and IPC going on behind the scenes.
+
+
+
+
+
+Finally the result is
+
+```bash
+
+```
 
