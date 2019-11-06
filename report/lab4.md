@@ -77,12 +77,6 @@ static void mem_init_mp(void)
 
 >  **Exercise 4.** The code in `trap_init_percpu()` (`kern/trap.c`) initializes the TSS and TSS descriptor for the BSP. It worked in Lab 3, but is incorrect when running on other CPUs. Change the code so that it can work on all CPUs. (Note: your new code should not use the global `ts` variable any more.) 
 
-`cpu_ts.ts_iomb` is the address of I/O permission bit map. When we use sensitive IO instructions, like `IN`, `OUT` and etc, the processor first checks whether `CPL <= IOPL`.  If this condition is true, the I/O operation may proceed. If not true, the processor checks the I/O permission map.  The I/O map base field is 16 bits wide and contains the offset of the beginning of the I/O permission map. thus `cpu_ts.ts_iomb `should not less than `sizeof(*struct* Taskstate)`.
-
- ![img](lab4.assets/fig8-2.gif) 
-
-Cited form  https://cs.nyu.edu/~mwalfish/classes/15fa/ref/i386/s08_03.htm.
-
 ```c
 void trap_init_percpu(void){
 	int i;
@@ -106,6 +100,14 @@ void trap_init_percpu(void){
 	lidt(&idt_pd);
 }
 ```
+
+> What is the usage of `cpu_ts.ts_iomb`?
+
+`cpu_ts.ts_iomb` is the address of I/O permission bit map. When we use sensitive IO instructions, like `IN`, `OUT` and etc, the processor first checks whether `CPL <= IOPL`.  If this condition is true, the I/O operation may proceed. If not true, the processor checks the I/O permission map.  The I/O map base field is 16 bits wide and contains the offset of the beginning of the I/O permission map. thus `cpu_ts.ts_iomb `should not less than `sizeof(*struct* Taskstate)`.
+
+ ![img](lab4.assets/fig8-2.gif) 
+
+Cited form  https://cs.nyu.edu/~mwalfish/classes/15fa/ref/i386/s08_03.htm.
 
 >  **Exercise 5.** Apply the big kernel lock as described above, by calling `lock_kernel()` and `unlock_kernel()` at the proper locations. 
 
@@ -478,23 +480,6 @@ void set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 > 	1006: I am '101'
 > ```
 
-### Page Table Self Mapping
-
-`UVPT` and `UVPD` is a trick named *Page Table Self Mapping*. In JOS, the page directory is the `0x3BD` in virtual memory.
-
-- `UVPT = 0x3BD<<22=0xEF400000`
-
-- `UVPD=(0x3BD<<22 | 0x3BD<<12)=UVPT | (UVPT>>10) = ‭0xEF40EF40000‬`
-- What is the physical address of page directory?
-  - The virtual address that contains page directory's physical address is `0xef7bdef4 = [PDX(UVPT), PDX(UVPT), PDX(UVPT), 00] = UVPT + (UVPT >> 10) + (UVPT >> 20)`
-- What is the physical address of page directory of `va`?
-  - The virtual address the contains `va`'s physical address in page directory is `[PDX(UVPT), PDX(UVPT), PDX(va), 00]`
-  - i.e. `[PGNUM(UVPD), PDX(va), 00]`
-- What is the physical address of page table of `va`?
-  - The virtual address the contains `va`'s physical address in page table is `[PDX(UVPT), PDX(va), PTX(va),00]`
-- The PTE for page number N is stored in `uvpt[N]`
-- The PDE for the Nth entry in page directory is `uvpd[N]`
-
 In `lib/fork.c:pgfault`, firstly we check that the faulting access was a write, and is to a copy-on-write page. Only under this situation could we copy this page. Then we allocate a new page, map it at PFTEMP, and remap the allocated page to the old page's address.
 
 ```c
@@ -541,9 +526,13 @@ static void pgfault(struct UTrapframe *utf)
 
 In `lib/fork.c:duppage`, map our virtual page into the target environment. If the page is writable or copy-on-write, the new mapping must be created copy-on-write, and then our mapping must be marked copy-on-write as well. 
 
+> Why do we need to mark ours copy-on-write again if it was already copy-on-write?
+
 The reason why do we need to mark ours copy-on-write again if it was already copy-on-write is that 
 
-Meanwhile, we should map the page copy-on-write into the address space of the child and then *remap* the page copy-on-write in its own address space. The order is significant.  Notice that `sys_page_map` will call `page_remove` after several calls to give up exciting mapping, which will decrease the reference counter of the old page. However, If we map the page copy-on-write into the address space of the parent firstly and the reference counter of this page is 1, this old page will be free. Thus we need to increase the reference counter of this page by mapping the page copy-on-write into the address space of the child firstly.
+> We should map the page copy-on-write into the address space of the child and then *remap* the page copy-on-write in its own address space.  The ordering here (i.e., marking a page as COW in the child before marking it in the parent) actually matters! Can you see why? 
+
+The order is significant.  Notice that `sys_page_map` will call `page_remove` after several calls to give up exciting mapping, which will decrease the reference counter of the old page. However, If we map the page copy-on-write into the address space of the parent firstly and the reference counter of this page is 1, this old page will be free. Thus we need to increase the reference counter of this page by mapping the page copy-on-write into the address space of the child firstly.
 
 ```c
 static int cduppage(envid_t envid, unsigned pn){
@@ -627,6 +616,23 @@ done:
 }
 ```
 
+> What is principle of `UVPT` and `UVPD`?
+
+`UVPT` and `UVPD` is a trick named *Page Table Self Mapping*. In JOS, the page directory is the `0x3BD` in virtual memory.
+
+- `UVPT = 0x3BD<<22=0xEF400000`
+
+- `UVPD=(0x3BD<<22 | 0x3BD<<12)=UVPT | (UVPT>>10) = ‭0xEF40EF40000‬`
+- What is the physical address of page directory?
+  - The virtual address that contains page directory's physical address is `0xef7bdef4 = [PDX(UVPT), PDX(UVPT), PDX(UVPT), 00] = UVPT + (UVPT >> 10) + (UVPT >> 20)`
+- What is the physical address of page directory of `va`?
+  - The virtual address the contains `va`'s physical address in page directory is `[PDX(UVPT), PDX(UVPT), PDX(va), 00]`
+  - i.e. `[PGNUM(UVPD), PDX(va), 00]`
+- What is the physical address of page table of `va`?
+  - The virtual address the contains `va`'s physical address in page table is `[PDX(UVPT), PDX(va), PTX(va),00]`
+- The PTE for page number N is stored in `uvpt[N]`
+- The PDE for the Nth entry in page directory is `uvpd[N]`
+
 ## Part C: Preemptive Multitasking and Inter-Process communication (IPC)
 
 > **Exercise 13.** Modify `kern/trapentry.S` and `kern/trap.c` to initialize the appropriate entries in the IDT and provide handlers for IRQs 0 through 15. Then modify the code in `env_alloc()` in `kern/env.c` to ensure that user environments are always run with interrupts enabled.
@@ -637,15 +643,41 @@ done:
 >
 > After doing this exercise, if you run your kernel with any test program that runs for a non-trivial length of time (e.g., `spin`), you should see the kernel print trap frames for hardware interrupts. While interrupts are now enabled in the processor, JOS isn't yet handling them, so you should see it misattribute each interrupt to the currently running user environment and destroy it. Eventually it should run out of environments to destroy and drop into the monitor.
 
+In `kern/trapentry.S` and `kern/trap.c`, register these hardware interrupts as what we have done before.
 
+```c
+......
+    
+#define SET_IRQ_GATE(IRQ_NUM) \
+	SETGATE(idt[IRQ_OFFSET+IRQ_NUM], 0, GD_KT, int_funs[IRQ_OFFSET+IRQ_NUM], 0)
 
+	SET_IRQ_GATE(IRQ_TIMER);
+	SET_IRQ_GATE(IRQ_KBD);
+	SET_IRQ_GATE(IRQ_SERIAL);
+	SET_IRQ_GATE(IRQ_SPURIOUS);
+	SET_IRQ_GATE(IRQ_IDE);
+	SET_IRQ_GATE(IRQ_ERROR);
 
+#undef SET_IRQ_GATE
+
+	
+	// Per-CPU setup 
+	trap_init_percpu();
+}
+```
 
 > **Exercise 14.** Modify the kernel's `trap_dispatch()` function so that it calls `sched_yield()` to find and run a different environment whenever a clock interrupt takes place.
 >
 > You should now be able to get the `user/spin` test to work: the parent environment should fork off the child, `sys_yield()` to it a couple times but in each case regain control of the CPU after one time slice, and finally kill the child environment and terminate gracefully.
 
+Handle clock interrupts in `kern/trap.c:trap_dispatch`. Remember to acknowledge the interrupt using `lapic_eoi()` before calling the scheduler.
 
+```c
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
+		lapic_eoi();
+		sched_yield(); // never return
+	}
+```
 
 > **Exercise 15.** Implement `sys_ipc_recv` and `sys_ipc_try_send` in `kern/syscall.c`. Read the comments on both before implementing them, since they have to work together. When you call `envid2env` in these routines, you should set the `checkperm` flag to 0, meaning that any environment is allowed to send IPC messages to any other environment, and the kernel does no special permission checking other than verifying that the target envid is valid.
 >
