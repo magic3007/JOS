@@ -689,9 +689,31 @@ Handle clock interrupts in `kern/trap.c:trap_dispatch`. Remember to acknowledge 
 
 
 
-Finally the result is
+Finally we pass all the tests.
 
 ```bash
+dumbfork: OK (1.7s)
+Part A score: 5/5
 
+faultread: OK (0.9s)
+faultwrite: OK (1.1s)
+faultdie: OK (0.9s)
+faultregs: OK (1.0s)
+faultalloc: OK (1.0s)
+faultallocbad: OK (1.7s)
+faultnostack: OK (2.4s)
+faultbadhandler: OK (1.9s)
+faultevilhandler: OK (0.9s)
+forktree: OK (1.8s)
+Part B score: 50/50
+
+spin: OK (1.3s)
+stresssched: OK (1.9s)
+sendpage: OK (1.0s)
+pingpong: OK (1.6s)
+primes: OK (34.8s)
+Part C score: 25/25
+
+Score: 80/80
 ```
 
