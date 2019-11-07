@@ -369,7 +369,7 @@ page_fault_handler(struct Trapframe *tf)
 	* go to destroy this environment.
 	*/
 	if(!curenv->env_pgfault_upcall){
-		cprintf("Page fault upcall doesn't exist!.\n");
+		cprintf("Warning: Page fault upcall doesn't exist!.\n");
 		goto done;
 	}
 

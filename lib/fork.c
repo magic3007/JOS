@@ -107,7 +107,6 @@ duppage(envid_t envid, unsigned pn){
 envid_t
 fork(void){
 	// LAB 4: Your code here.
-
 	int rc = -1;
 	envid_t envid;
 	int pdi, pti, pn;
@@ -147,14 +146,15 @@ fork(void){
 		}
 	}
 	
+	
 	/*
-	* copy our page fault upcall to child.
-	* Notice that both the page fault upcall and the page fault handler 
-	* which is called by page fault upcall are both in the form of function
-	* handler, thus we can simply copy the function pointer of page fault 
-	* upcall in envs[] arrays.
+	* set page fault upcall for child.
+	* Notice that the page fault handler which is called by page fault upcall 
+	* are in the form of function pointer, thus we can simply set the function 
+	* pointer of page fault upcall in envs[] arrays.
 	*/
-	if((rc = sys_env_set_pgfault_upcall(envid, thisenv->env_pgfault_upcall)) < 0)
+	extern void _pgfault_upcall (void);
+	if((rc = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0)
 		goto destroy;
 	
 	// mark the child as runnable
@@ -170,9 +170,74 @@ done:
 }
 
 // Challenge!
-int
-sfork(void)
-{
-	panic("sfork not implemented");
-	return -E_INVAL;
+
+static int
+shared_duppage(envid_t envid, unsigned pn, int is_cow){
+	int r;
+	pte_t pte = uvpt[pn];
+	void *addr  = (void*)(pn << PGSHIFT);
+
+	// If is_cow is true or the source page is cow, act the same as duppage.
+	if(is_cow || (pte&PTE_COW))
+		return duppage(envid, pn);
+	
+	// child environment should have the same permission as the parent environment.
+	if((r = sys_page_map(0, addr, envid, addr, PTE_U | PTE_P | (pte & PTE_W)))<0)
+		return r;
+	
+	return 0;
+}
+
+envid_t 
+sfork(void){
+	int rc = -1;
+	envid_t envid;
+	int pdi, pti, pn;
+	uintptr_t addr;
+
+	// Set up our page fault handler
+	set_pgfault_handler(pgfault);
+
+	// Create a child.
+	if((envid = sys_exofork()) < 0) return envid;
+	
+	// children environment
+	if(envid==0){
+		// fix thisenv
+		thisenv=&envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	// Copy parent's address space
+	// Pages in normal user stack area should be copy-on-write.
+	int is_stackarea = 1;
+	for(addr = USTACKTOP - PGSIZE; addr>=UTEXT; addr-=PGSIZE){
+		// find a page mapping 
+		if((uvpd[PDX(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_U)){
+			if((rc = shared_duppage(envid, PGNUM(addr), is_stackarea))<0)
+				goto destroy;
+		}else{
+			is_stackarea = 0;
+		}
+	}
+
+	// user exception stack should never be marked copy-on-write
+	if((rc = sys_page_alloc(envid, (void*)(UXSTACKTOP  - PGSIZE), PTE_P | PTE_U | PTE_W)) < 0)
+		goto destroy;
+
+	extern void _pgfault_upcall (void);
+
+	if((rc = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0)
+		goto destroy;
+	
+	// mark the child as runnable
+	if((rc =sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
+		goto destroy;
+
+	rc = envid;
+	goto done;
+destroy:
+	sys_env_destroy(envid);
+done:
+	return rc;
 }

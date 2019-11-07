@@ -230,13 +230,13 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	pte_t *pte;
 	static const int ness_perm = PTE_U | PTE_P;
 	
-	if((rc = envid2env(srcenvid, &src_env, 1)) < 0) return rc;
+	if((rc = envid2env(srcenvid, &src_env, 1)) < 0)return rc;
 	if((rc = envid2env(dstenvid, &dst_env, 1)) < 0) return rc;
-	if(src_addr>=UTOP || src_addr%PGSIZE!=0) return -E_INVAL;
-	if(dst_addr>=UTOP || dst_addr%PGSIZE!=0) return -E_INVAL;
-	if((perm & ness_perm)!=ness_perm || (perm & PTE_SYSCALL)!=perm) return -E_INVAL;
-	if((pp = page_lookup(src_env->env_pgdir, srcva, &pte)) == NULL) return -E_INVAL;
-	if((perm & PTE_W) && !(*pte & PTE_W)) return -E_INVAL;
+	if(src_addr>=UTOP || src_addr%PGSIZE!=0)return -E_INVAL;
+	if(dst_addr>=UTOP || dst_addr%PGSIZE!=0)return -E_INVAL;
+	if((perm & ness_perm)!=ness_perm || (perm & PTE_SYSCALL)!=perm)return -E_INVAL;
+	if((pp = page_lookup(src_env->env_pgdir, srcva, &pte)) == NULL)return -E_INVAL;
+	if((perm & PTE_W) && !(*pte & PTE_W))return -E_INVAL;
 	if((rc=page_insert(dst_env->env_pgdir, pp, dstva, perm))<0) return rc;
 	return 0;
 }
@@ -325,7 +325,7 @@ sys_page_unmap(envid_t envid, void *va)
 //		current environment's address space.
 //	-E_NO_MEM if there's not enough memory to map srcva in envid's
 //		address space.
-int
+static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm){
 	int rc;
 	struct Env *env;
@@ -338,7 +338,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm){
 	/*
 	* return -E_IPC_NOT_RECV if envid is not currently blocked in sys_ipc_recv,
 	* or another environment managed to send first.
-	* only one program could run in kernel mode, so there is no race conditon
+	* only one program could run in kernel mode, so there is no race condition
 	* in syscall call function.
 	*/
 	if(!env->env_ipc_recving)

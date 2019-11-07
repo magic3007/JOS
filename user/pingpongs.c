@@ -11,6 +11,7 @@ umain(int argc, char **argv)
 	envid_t who;
 	uint32_t i;
 
+
 	i = 0;
 	if ((who = sfork()) != 0) {
 		cprintf("i am %08x; thisenv is %p\n", sys_getenvid(), thisenv);

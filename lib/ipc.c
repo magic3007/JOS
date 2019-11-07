@@ -47,8 +47,9 @@ ipc_recv(envid_t *from_env_store, void *pg, int *perm_store){
 //   as meaning "no page".  (Zero is not the right value.)
 void
 ipc_send(envid_t to_env, uint32_t val, void *pg, int perm){
+	if(to_env == sys_getenvid())
+		panic("ipc_send: cannot send message to itself.");
 	int rc = -1;
-	cprintf("to_env=%d val=%d, pg=0x%0x, perm=%d\n", to_env, val, (uintptr_t)pg, perm);
 	while(rc < 0){
 		rc = sys_ipc_try_send(to_env, val, pg==NULL?(void*)UTOP:pg, perm);
 		if(rc == 0) return;
