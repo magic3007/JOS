@@ -282,15 +282,187 @@ Type 'help' for a list of commands.                                             
 >
 > Write a test program or two that verifies that your scheduling algorithm is working correctly (i.e., the right environments get run in the right order). It may be easier to write these test programs once you have implemented `fork()` and IPC in parts B and C of this lab.
 
+Add the attribute `env_priority` to `Struct Env`(in `inc/env.h`):
 
+```c++
+struct Env {
+	struct Trapframe env_tf;	// Saved registers
+	struct Env *env_link;		// Next free Env
+	envid_t env_id;			// Unique environment identifier
+	envid_t env_parent_id;		// env_id of this env's parent
+	enum EnvType env_type;		// Indicates special system environments
+	unsigned env_status;		// Status of the environment
+	uint32_t env_runs;		// Number of times environment has run
+	int env_cpunum;			// The CPU that the env is running on
+	int env_priority; 		// The priority of current enviroment
+
+
+	// Address space
+	pde_t *env_pgdir;		// Kernel virtual address of page dir
+
+	// Exception handling
+	void *env_pgfault_upcall;	// Page fault upcall entry point
+
+	// Lab 4 IPC
+	bool env_ipc_recving;		// Env is blocked receiving
+	void *env_ipc_dstva;		// VA at which to map received page
+	uint32_t env_ipc_value;		// Data value sent to us
+	envid_t env_ipc_from;		// envid of the sender
+	int env_ipc_perm;		// Perm of page mapping received
+};
+```
+
+Use system call to modify the priority(in `kern/syscall.c`):
+
+```c
+static int
+sys_env_set_priority(envid_t envid, int priority){
+	int rc;
+	struct Env *env;
+	
+	if((rc = envid2env(envid, &env, 1)) < 0) return rc;
+	env->env_priority = priority;
+	return 0;
+}
+```
+
+Implement fixed-priority scheduling in `kern/sched.c`:
+
+```c
+struct Env *env;
+	int highest_priority = 0, i;
+
+	for(int i = 0; i < NENV; i++)
+		if(envs[i].env_status == ENV_RUNNABLE && envs[i].env_priority > highest_priority)
+			highest_priority = envs[i].env_priority;
+	
+	env = thiscpu->cpu_env;
+	if(!env) env = envs + (NENV - 1);
+	for(int i = 0; i < NENV; i++){
+		env++;
+		if(env == envs + NENV) env = envs;
+		if(env->env_status == ENV_RUNNABLE && env->env_priority == highest_priority)
+			env_run(env);
+	}
+
+	if(thiscpu->cpu_env && thiscpu->cpu_env->env_status == ENV_RUNNING)
+		env_run(thiscpu->cpu_env);
+
+	// sched_halt never returns
+	sched_halt();
+```
+
+We also implement a test program or two that verifies that your scheduling algorithm(in `user/fixscheduling.c`), and the program works as expected.
+
+```c
+#include <inc/lib.h>
+
+void
+umain(int argc, char **argv)
+{
+	envid_t env;
+
+	cprintf("I am the parent.  Forking the child...\n");
+	if ((env = fork()) == 0) {
+		cprintf("I am the child.  Reset my priority and let it lower than that of the parent.\n");
+        envid_t me = sys_getenvid();
+        sys_env_set_priority(me, -1);
+        sys_yield();
+        panic("Never reach here!");
+	}
+
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+	cprintf("I am the parent.  Try to Run the child...\n");
+	sys_yield();
+
+	cprintf("I am the parent.  Killing the child...\n");
+	sys_env_destroy(env);
+}
+```
 
 >  *Challenge!* The JOS kernel currently does not allow applications to use the x86 processor's x87 floating-point unit (FPU), MMX instructions, or Streaming SIMD Extensions (SSE). Extend the `Env` structure to provide a save area for the processor's floating point state, and extend the context switching code to save and restore this state properly when switching from one environment to another. The `FXSAVE` and `FXRSTOR` instructions may be useful, but note that these are not in the old i386 user's manual because they were introduced in more recent processors. Write a user-level test program that does something cool with floating-point. 
 
-​	
+ The `FXSAVE` and `FXRSTOR` instructions save and restore a 512-byte data structure, the first byte of which must be aligned on a 16-byte boundary.
+
+In `inc/trap.h`, add the save area of the x87 FPU, MMX, XMM, and MXCSR register state into struct `Trapframe`:
+
+```c
+struct Trapframe {
+	char fxsave_region[512]; // the save area of the x87 FPU, MMX, XMM, and MXCSR register state.
+	struct PushRegs tf_regs;
+	uint16_t tf_es;
+```
+
+In `kern/trapentry.S:_alltraps` and `kern/env.c:env_pop_tf`, save and restore the floating register state during context switching:
+
+```c
+void
+env_pop_tf(struct Trapframe *tf)
+{
+	// Record the CPU we are running on for user-space debugging
+	curenv->env_cpunum = cpunum();
+
+	asm volatile(
+		"\tmovl %0,%%esp\n"
+		"\tmovl %%esp, %%eax\n"
+		"\taddl $0xf, %%eax\n"
+		"\tandl $0xfffffff0, %%eax\n"
+		"\tfxrstor (%%eax)\n"
+		"\taddl $528, %%esp\n"
+		"\tpopal\n"
+		"\tpopl %%es\n"
+		"\tpopl %%ds\n"
+		"\taddl $0x8,%%esp\n" /* skip tf_trapno and tf_errcode */
+		"\tiret\n"
+		: : "g" (tf) : "memory");
+	panic("iret failed");  /* mostly to placate the compiler */
+}
+```
+
+```asm
+_alltraps:
+	/* push %ds and %es register on kernel stack */
+	pushl %ds;
+	pushl %es;
+
+	/* push all general-purpose registers */
+	pushal;
+
+	/* push floating registers state */
+	subl $528, %esp;		/* allocate 512+16 bytes for alignment */
+	movl %esp, %eax; 		/* 16-byte alignment */
+	addl $0xf, %eax;		/* round up */
+	andl $0xfffffff0, %eax; 
+	fxsave (%eax);
+
+	/* assign %ds and %es to kernel data segment selector */
+	movl $GD_KD, %eax;
+	movw %ax, %ds;
+	movw %ax, %es;
+	
+	/* pass a pointer to the Trapframe as an argument to trap() */
+	pushl %esp
+	
+    /* call trap() and never return */
+	call trap
+```
+
+
 
 > ​    **Exercise 7.** Implement the system calls described above in `kern/syscall.c` and make sure `syscall()` calls them. You will need to use various functions in `kern/pmap.c` and `kern/env.c`, particularly `envid2env()`. For now, whenever you call `envid2env()`, pass 1 in the `checkperm` parameter. Be sure you check for any invalid system call arguments, returning `-E_INVAL` in that case. Test your JOS kernel with `user/dumbfork` and make sure it works before proceeding. 
-
-
 
 
 Follow the guide in `kern/syscall.c` and fill in the function ` sys_exofork `, ` sys_env_set_status `, `sys_page_alloc`, `sys_page_map` and `sys_page_unmap`. And then add their dispatchers in `kern/syscall.c:syscall`. 

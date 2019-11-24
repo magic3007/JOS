@@ -56,6 +56,7 @@ struct PushRegs {
 } __attribute__((packed));
 
 struct Trapframe {
+	char fxsave_region[512]; // the save area of the x87 FPU, MMX, XMM, and MXCSR register state.
 	struct PushRegs tf_regs;
 	uint16_t tf_es;
 	uint16_t tf_padding1;

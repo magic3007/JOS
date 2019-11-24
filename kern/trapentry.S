@@ -53,7 +53,14 @@ _alltraps:
 
 	/* push all general-purpose registers */
 	pushal;
-	
+
+	/* push floating registers state */
+	subl $528, %esp;		/* allocate 512+16 bytes for alignment */
+	movl %esp, %eax; 		/* 16-byte alignment */
+	addl $0xf, %eax;		/* round up */
+	andl $0xfffffff0, %eax; 
+	fxsave (%eax);
+
 	/* assign %ds and %es to kernel data segment selector */
 	movl $GD_KD, %eax;
 	movw %ax, %ds;

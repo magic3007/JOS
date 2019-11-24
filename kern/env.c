@@ -533,6 +533,11 @@ env_pop_tf(struct Trapframe *tf)
 
 	asm volatile(
 		"\tmovl %0,%%esp\n"
+		"\tmovl %%esp, %%eax\n"
+		"\taddl $0xf, %%eax\n"
+		"\tandl $0xfffffff0, %%eax\n"
+		"\tfxrstor (%%eax)\n"
+		"\taddl $528, %%esp\n"
 		"\tpopal\n"
 		"\tpopl %%es\n"
 		"\tpopl %%ds\n"
