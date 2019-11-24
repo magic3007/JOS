@@ -11,8 +11,8 @@ void sched_halt(void);
 void
 sched_yield(void)
 {
-	struct Env *idle;
 
+#if 0
 	// Implement simple round-robin scheduling.
 	//
 	// Search through 'envs' for an ENV_RUNNABLE environment in
@@ -45,6 +45,44 @@ sched_yield(void)
 
 	// sched_halt never returns
 	sched_halt();
+#else
+	/* 
+	* Implement fixed-priority scheduling.
+	* 
+	* Search through 'envs' for an ENV_RUNNABLE environment with the highest priority.
+	* 
+	* If there are more than one environment with the highest priority, select the environment
+	* in the circular fashion starting just after the env this CPU was last running.
+	*
+	* If no envs with highest priority are runnable, but the environment previously running 
+	* on this CPU is still ENV_RUNNING, it's okay to choose that environment.
+	* 
+	* If there are no runnable environments, simply halt the cpu.
+	*/
+
+	struct Env *env;
+	int highest_priority = 0, i;
+
+	for(int i = 0; i < NENV; i++)
+		if(envs[i].env_status == ENV_RUNNABLE && envs[i].env_priority > highest_priority)
+			highest_priority = envs[i].env_priority;
+	
+	env = thiscpu->cpu_env;
+	if(!env) env = envs + (NENV - 1);
+	for(int i = 0; i < NENV; i++){
+		env++;
+		if(env == envs + NENV) env = envs;
+		if(env->env_status == ENV_RUNNABLE && env->env_priority == highest_priority)
+			env_run(env);
+	}
+
+	if(thiscpu->cpu_env && thiscpu->cpu_env->env_status == ENV_RUNNING)
+		env_run(thiscpu->cpu_env);
+
+	// sched_halt never returns
+	sched_halt();
+	
+#endif
 }
 
 // Halt this CPU when there is nothing to do. Wait until the

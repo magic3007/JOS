@@ -277,9 +277,21 @@ Type 'help' for a list of commands.                                             
    
    On the other hand, he recovery of context switching happens in `kern/env.c:env_run` and `kern/env.c:env_pop_tf`, which restores the general registers, `es`, `ds` by software instruction, and `eip`, `cs`, `eflags`, `esp`, `ss` by `iret`.
    
-   
+
+> *Challenge!* Add a less trivial scheduling policy to the kernel, such as a fixed-priority scheduler that allows each environment to be assigned a priority and ensures that higher-priority environments are always chosen in preference to lower-priority environments. If you're feeling really adventurous, try implementing a Unix-style adjustable-priority scheduler or even a lottery or stride scheduler. (Look up "lottery scheduling" and "stride scheduling" in Google.)
+>
+> Write a test program or two that verifies that your scheduling algorithm is working correctly (i.e., the right environments get run in the right order). It may be easier to write these test programs once you have implemented `fork()` and IPC in parts B and C of this lab.
+
+
+
+>  *Challenge!* The JOS kernel currently does not allow applications to use the x86 processor's x87 floating-point unit (FPU), MMX instructions, or Streaming SIMD Extensions (SSE). Extend the `Env` structure to provide a save area for the processor's floating point state, and extend the context switching code to save and restore this state properly when switching from one environment to another. The `FXSAVE` and `FXRSTOR` instructions may be useful, but note that these are not in the old i386 user's manual because they were introduced in more recent processors. Write a user-level test program that does something cool with floating-point. 
+
+​	
 
 > ​    **Exercise 7.** Implement the system calls described above in `kern/syscall.c` and make sure `syscall()` calls them. You will need to use various functions in `kern/pmap.c` and `kern/env.c`, particularly `envid2env()`. For now, whenever you call `envid2env()`, pass 1 in the `checkperm` parameter. Be sure you check for any invalid system call arguments, returning `-E_INVAL` in that case. Test your JOS kernel with `user/dumbfork` and make sure it works before proceeding. 
+
+
+
 
 Follow the guide in `kern/syscall.c` and fill in the function ` sys_exofork `, ` sys_env_set_status `, `sys_page_alloc`, `sys_page_map` and `sys_page_unmap`. And then add their dispatchers in `kern/syscall.c:syscall`. 
 
@@ -937,7 +949,7 @@ void ipc_send(envid_t to_env, uint32_t val, void *pg, int perm){
 
 
 
-Finally we pass all the tests and finish one challenge.
+Finally we pass all the tests and finish three challenges.
 
 ```bash
 dumbfork: OK (1.7s)
