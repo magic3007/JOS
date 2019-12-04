@@ -302,6 +302,21 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	int r, pdi, pti, pn;
+	void *addr;
+
+	for(pdi = 0; pdi < PDX(UTOP); pdi++){
+		if(!(uvpd[pdi] & PTE_P))
+			continue;
+		for(pti = 0; pti < NPDENTRIES; pti++){
+			pn = (pdi << 10) + pti;
+			if((uvpt[pn] & PTE_P) && (uvpt[pn] & PTE_SHARE)){
+				addr = (void*)(pn << PGSHIFT);
+				if((r = sys_page_map(0, addr, child, addr, PTE_SYSCALL & uvpt[pn]))<0)
+					panic("in lib/spawn.c:copy_shared_pages: %e", r);			
+			}
+		}
+	}
 	return 0;
 }
 

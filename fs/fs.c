@@ -9,8 +9,7 @@
 
 // Validate the file system super-block.
 void
-check_super(void)
-{
+check_super(void){
 	if (super->s_magic != FS_MAGIC)
 		panic("bad file system magic number");
 
@@ -92,7 +91,7 @@ check_bitmap(void)
 
 	// Make sure all bitmap blocks are marked in-use
 	for (i = 0; i * BLKBITSIZE < super->s_nblocks; i++)
-		assert(!block_is_free(2+i));
+		assert(!block_is_free( +i));
 
 	// Make sure the reserved and root blocks are marked in-use.
 	assert(!block_is_free(0));
@@ -173,7 +172,7 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 		}
 		f->f_indirect = r;
 		/* clear any block you allocate. */
-		flush_block(diskaddr(r));
+		memset(diskaddr(r), 0, BLKSIZE);
 	}
 
 	uint32_t *indirect_addr = diskaddr(f->f_indirect);
@@ -203,7 +202,7 @@ file_get_block(struct File *f, uint32_t filebno, char **blk){
 		if((r = alloc_block()) < 0)
 			return r;
 		*ppdiskbno = r;
-		flush_block(diskaddr(r));	
+		memset(diskaddr(r), 0, BLKSIZE);
 	}
 	*blk =diskaddr(*ppdiskbno);
 	return 0;

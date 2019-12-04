@@ -75,13 +75,16 @@ duppage(envid_t envid, unsigned pn){
 
 	// LAB 4: Your code here.
 	pte = uvpt[pn];
-	if((pte & PTE_W) || (pte & PTE_COW)){
+	if(pte & PTE_SHARE){
+		if((r = sys_page_map(0, addr, envid, addr, PTE_SYSCALL))<0)
+			return r;
+	}
+	else if((pte & PTE_W) || (pte & PTE_COW)){
 		if((r = sys_page_map(0, addr, envid, addr, PTE_U | PTE_P | PTE_COW))<0)
 			return r;
 		if((r = sys_page_map(0, addr, 0, addr, PTE_U | PTE_P | PTE_COW))<0)
 			return r;
-	}
-	else{
+	}else{
 		if((r = sys_page_map(0, addr, envid, addr, PTE_U | PTE_P))<0)
 			return r;
 	}
