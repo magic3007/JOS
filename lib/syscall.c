@@ -96,8 +96,10 @@ sys_env_set_status(envid_t envid, int status)
 int
 sys_env_set_priority(envid_t envid, int priority){
 	return syscall(SYS_env_set_priority, 1, envid, priority, 0, 0, 0);
-sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
-{
+}
+
+int 
+sys_env_set_trapframe(envid_t envid, struct Trapframe *tf){
 	return syscall(SYS_env_set_trapframe, 1, envid, (uint32_t) tf, 0, 0, 0);
 }
 
