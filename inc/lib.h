@@ -47,6 +47,7 @@ int	sys_cgetc(void);
 envid_t	sys_getenvid(void);
 int	sys_env_destroy(envid_t);
 void	sys_yield(void);
+int sys_exec(uint8_t *binary, const char **argv);
 static envid_t sys_exofork(void);
 int	sys_env_set_status(envid_t env, int status);
 int sys_env_set_priority(envid_t env, int priority);
@@ -104,6 +105,10 @@ int	pageref(void *addr);
 // spawn.c
 envid_t	spawn(const char *program, const char **argv);
 envid_t	spawnl(const char *program, const char *arg0, ...);
+
+// exec.c
+int exec(const char *prog, const char **argv);
+int execl(const char *prog, const char *arg0, ...);
 
 // console.c
 void	cputchar(int c);

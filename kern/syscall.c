@@ -4,6 +4,7 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inc/elf.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
@@ -12,6 +13,9 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 
+#define UTEMP2USTACK(addr)	((void*) (addr) + (USTACKTOP - PGSIZE) - UTEMP)
+#define UTEMP2			(UTEMP + PGSIZE)
+#define UTEMP3			(UTEMP2 + PGSIZE)
 
 // Returns the current environment's envid.
 static envid_t
@@ -435,6 +439,134 @@ sys_ipc_recv(void *dstva){
 	return 0;
 }
 
+
+// Set up the initial stack page.
+// using the arguments array pointed to by 'argv',
+// which is a null-terminated array of pointers to null-terminated strings.
+//
+// On success, returns 0 and sets *init_esp
+// to the initial stack pointe.
+// Returns < 0 on failure.
+static int
+init_stack(const char **argv, uintptr_t *init_esp)
+{
+	size_t string_size;
+	int argc, i, r;
+	char *string_store;
+	uintptr_t *argv_store;
+
+	// Count the number of arguments (argc)
+	// and the total amount of space needed for strings (string_size).
+	string_size = 0;
+	for (argc = 0; argv[argc] != 0; argc++)
+		string_size += strlen(argv[argc]) + 1;
+
+	// Determine where to place the strings and the argv array.
+	// Set up pointers into the temporary page 'UTEMP'; we'll map a page
+	// there later, then remap that page into the new environment
+	// at (USTACKTOP - PGSIZE).
+	// strings is the topmost thing on the stack.
+	string_store = (char*) UTEMP + PGSIZE - string_size;
+	// argv is below that.  There's one argument pointer per argument, plus
+	// a null pointer.
+	argv_store = (uintptr_t*) (ROUNDDOWN(string_store, 4) - 4 * (argc + 1));
+
+	// Make sure that argv, strings, and the 2 words that hold 'argc'
+	// and 'argv' themselves will all fit in a single stack page.
+	if ((void*) (argv_store - 2) < (void*) UTEMP)
+		return -E_NO_MEM;
+
+	// Allocate the single stack page at UTEMP.
+	if ((r = sys_page_alloc(0, (void*) UTEMP, PTE_P|PTE_U|PTE_W)) < 0)
+		return r;
+
+
+	//	* Initialize 'argv_store[i]' to point to argument string i,
+	//	  for all 0 <= i < argc.
+	//	  Also, copy the argument strings from 'argv' into the
+	//	  newly-allocated stack page.
+	//
+	//	* Set 'argv_store[argc]' to 0 to null-terminate the args array.
+	//
+	//	* Push two more words onto the  stack below 'args',
+	//	  containing the argc and argv parameters to be passed
+	//	  to the new umain() function.
+	//	  argv should be below argc on the stack.
+	//	  (Again, argv should use an address valid in the new
+	//	  environment.)
+	//
+	//	* Set *init_esp to the initial stack pointer.
+	//	  (Again, use an address valid in the new environment.)
+	for (i = 0; i < argc; i++) {
+		argv_store[i] = UTEMP2USTACK(string_store);
+		strcpy(string_store, argv[i]);
+		string_store += strlen(argv[i]) + 1;
+	}
+	argv_store[argc] = 0;
+	assert(string_store == (char*)UTEMP + PGSIZE);
+
+	argv_store[-1] = UTEMP2USTACK(argv_store);
+	argv_store[-2] = argc;
+
+	*init_esp = UTEMP2USTACK(&argv_store[-2]);
+
+	// After completing the stack, map it into the user normal stack.
+	// and unmap it from ours!
+	if ((r = sys_page_map(0, UTEMP, 0, (void*) (USTACKTOP - PGSIZE), PTE_P | PTE_U | PTE_W)) < 0)
+		goto error;
+	if ((r = sys_page_unmap(0, UTEMP)) < 0)
+		goto error;
+
+	return 0;
+
+error:
+	sys_page_unmap(0, UTEMP);
+	return r;
+}
+
+static int
+sys_exec(uint8_t *binary, const char **argv){
+	int r;
+	struct Proghdr *ph, *eph;
+	struct Elf *elf = (struct Elf *)binary;
+	uintptr_t va;
+	size_t memsz, filesz, offset;
+
+	if(elf->e_magic != ELF_MAGIC)
+		panic("sys_exec: bad elf");
+	
+	ph = (struct Proghdr *) (binary + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+
+	/* 
+	* Set up program segments as defined in ELF header.
+	* consult the implementation of kern/env.c:load_icode.
+	*/
+	for(;ph < eph; ph++){
+		if(ph->p_type == ELF_PROG_LOAD){
+			va = ph->p_va;
+			memsz = ph->p_memsz;
+			filesz = ph->p_filesz;
+			offset = ph->p_offset;
+			if(filesz > memsz)
+				panic("segment file size is larger than segment memory size");
+			region_alloc(curenv, (void*)va, memsz);
+			memmove((void*)va, binary + offset, filesz);
+            memset((void*)(va+filesz), 0, memsz - filesz);
+		}
+	}
+
+	/* set up the initial $eip. */
+	curenv->env_tf.tf_eip = elf->e_entry;
+
+	/* initialize the stack*/
+	if((r = init_stack(argv, &curenv->env_tf.tf_esp))<0)
+		panic("sys_exec: init_stack: %e", r);
+	
+	sched_yield(); // never return.
+}
+
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -475,6 +607,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			break;
 		case SYS_page_alloc:
 			ret = sys_page_alloc(a1, (void*)a2, a3);
+			break;
+		case SYS_exec:
+			ret = sys_exec((uint8_t *)a1, (const char **)a2);
 			break;
 		case SYS_page_map:
 			ret = sys_page_map(a1, (void*)a2, a3, (void*)a4, a5);

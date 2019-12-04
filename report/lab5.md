@@ -381,8 +381,8 @@ copy_shared_pages(envid_t child)
 > What is the different between `fork`, `exec` and `spawn` in JOS?
 
 - `fork`: child environment and parent environment are totally the same when the former is created, consisting of the file descriptor table. However, they are independent after the child is created.
-- `exec`: Just a mean to load a ELF file, rewrite the whole virtual address space and start a new environment.
-- `spawn`: similar to `exec`, but the pages with `PTE_SHARE` in their page table entries could be shared between parent and child.
+- `exec`: Just a mean to load a ELF file, rewrite the whole virtual address space. Note that `exec` never allocate a new environment.
+- `spawn`: similar to `exec`, but `spawn` allocate a new environment and the pages with `PTE_SHARE` in their page table entries could be shared between parent and child.  The `spawn` function effectively acts like a `fork` in UNIX followed by an immediate `exec` in the child process. 
 
 ### The keyboard interface
 

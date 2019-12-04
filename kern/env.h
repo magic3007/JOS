@@ -33,4 +33,6 @@ void	env_pop_tf(struct Trapframe *tf) __attribute__((noreturn));
 			   type);					\
 	} while (0)
 
+void region_alloc(struct Env *e, void *va, size_t len);
+
 #endif // !JOS_KERN_ENV_H

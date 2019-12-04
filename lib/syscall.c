@@ -67,6 +67,10 @@ sys_yield(void)
 	syscall(SYS_yield, 0, 0, 0, 0, 0, 0);
 }
 
+int sys_exec(uint8_t *binary, const char **argv){
+	return syscall(SYS_exec, 1, (uint32_t)binary, (uint32_t)argv, 0, 0, 0);
+}
+
 int
 sys_page_alloc(envid_t envid, void *va, int perm)
 {
@@ -120,4 +124,3 @@ sys_ipc_recv(void *dstva)
 {
 	return syscall(SYS_ipc_recv, 1, (uint32_t)dstva, 0, 0, 0, 0);
 }
-
