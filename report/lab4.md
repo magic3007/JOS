@@ -401,7 +401,7 @@ In `inc/trap.h`, add the save area of the x87 FPU, MMX, XMM, and MXCSR register 
 
 ```c
 struct Trapframe {
-	char fxsave_region[512]; // the save area of the x87 FPU, MMX, XMM, and MXCSR register state.
+	char fxsave_region[528]; // the save area of the x87 FPU, MMX, XMM, and MXCSR register state.
 	struct PushRegs tf_regs;
 	uint16_t tf_es;
 ```
