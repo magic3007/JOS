@@ -316,6 +316,132 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 }
 ```
 
+>  *Challenge!* Implement Unix-style `exec`. 
+
+ Implementing a UNIX-style `exec` from user space in *exokernel fashion* is not such easy, as we need to replace even the code segment we are are running. So I decide to achieve it under the help of system call.
+
+Firstly, we load the raw ELF files into a temporary region located at `EXECTEMP = 0xe0000000`(in `lib/exec.c`):
+
+```c
+int
+exec(const char *prog, const char **argv){
+    int r, fd;
+    struct Stat st;
+    
+    /* read the state information of this elf file */
+    if((r = stat(prog, &st)) < 0)
+        return r;
+
+    if((fd = open(prog, O_RDONLY)) < 0)
+        return fd;
+    
+    void *va = (void *)EXECTEMP;
+    void *end = (void*)(EXECTEMP + st.st_size);
+
+    /* read the raw ELF file at EXECTEMP in memory */
+    do{
+        if((r = sys_page_alloc(0, va, PTE_U | PTE_P | PTE_W)) < 0)
+            goto error;
+        size_t n = MIN(PGSIZE, end - va);
+        if((r = readn(fd, va, n)) < 0)
+            goto error;
+        va += n;
+    }while(va < end);
+
+    if((r = sys_exec((uint8_t*)EXECTEMP, argv))<0) /* If on success, it will never return. */
+        goto error;
+    
+error:
+    close(fd);
+    return r;
+}
+```
+
+That we use system call `sys_exec` to make sure that the code body of this function is located above `USTACKTOP`. Consulting the implement of `kern/env.c:load_icode`, we set up program segments and code entry as defined in ELF header.(in `kern/syscall.c:sys_exec`)
+
+```c
+static int
+sys_exec(uint8_t *binary, const char **argv){
+	int r;
+	struct Proghdr *ph, *eph;
+	struct Elf *elf = (struct Elf *)binary;
+	uintptr_t va;
+	size_t memsz, filesz, offset;
+
+	if(elf->e_magic != ELF_MAGIC)
+		panic("sys_exec: bad elf");
+	
+	ph = (struct Proghdr *) (binary + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+	
+	/* 
+	* Set up program segments as defined in ELF header.
+	* consult the implementation of kern/env.c:load_icode.
+	*/
+	for(;ph < eph; ph++){
+		if(ph->p_type == ELF_PROG_LOAD){
+			va = ph->p_va;
+			memsz = ph->p_memsz;
+			filesz = ph->p_filesz;
+			offset = ph->p_offset;
+			if(filesz > memsz)
+				panic("segment file size is larger than segment memory size");
+			region_alloc(curenv, (void*)va, memsz);
+			memmove((void*)va, binary + offset, filesz);
+            memset((void*)(va+filesz), 0, memsz - filesz);
+		}
+	}
+    
+    /* set up the initial $eip. */
+	curenv->env_tf.tf_eip = elf->e_entry;
+```
+
+We also need to initialize the user normal stack like what we have done in `spawn` under the transition through `UTEMP`.
+
+```c
+	/* initialize the stack*/
+	if((r = init_stack(argv, &curenv->env_tf.tf_esp))<0)
+		panic("sys_exec: init_stack: %e", r);
+	
+	sched_yield(); // never return.
+}
+```
+
+Finally, we also provide two program `user/exececho.c` and `user/exechello.c` to test our implement, feel free to run `make run-exechello-nox` or `make run-exechello`.
+
+```c
+// exechello.c
+#include <inc/lib.h>
+
+void
+umain(int argc, char **argv){
+    int r;
+	cprintf("hello, world\n");
+	cprintf("i am environment %08x\n", thisenv->env_id);
+    char paras[4][356]={
+        "exececho",
+        "hello",
+        "I am executed from exec!"
+    }; // make sure that these strings are stored on stack.
+    for(int i = 0; i < 3; i++)
+        cprintf("address of para[%d]: %p\n", i, paras[i]);
+    if((r =  execl("exececho", paras[0], paras[1], paras[2], 0)) < 0) // never return
+        panic("exec never return!: %e", r);
+}
+```
+
+```c
+// exececho.c
+#include <inc/lib.h>
+
+void
+umain(int argc, char **argv){
+    cprintf("i am environment %08x from exececho\n", thisenv->env_id);
+    for(int i = 0; i < argc; i++)
+        cprintf("argv[%d]=%s\n", i, argv[i]);
+}
+```
+
 ### Sharing library state across fork and spawn
 
 > **Exercise 8.** Change `duppage` in `lib/fork.c` to follow the new convention. If the page table entry has the `PTE_SHARE` bit set, just copy the mapping directly. (You should use `PTE_SYSCALL`, not `0xfff`, to mask out the relevant bits from the page table entry. `0xfff` picks up the accessed and dirty bits as well.)

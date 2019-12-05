@@ -537,7 +537,7 @@ sys_exec(uint8_t *binary, const char **argv){
 	
 	ph = (struct Proghdr *) (binary + elf->e_phoff);
 	eph = ph + elf->e_phnum;
-
+	
 	/* 
 	* Set up program segments as defined in ELF header.
 	* consult the implementation of kern/env.c:load_icode.
@@ -556,16 +556,18 @@ sys_exec(uint8_t *binary, const char **argv){
 		}
 	}
 
+
 	/* set up the initial $eip. */
 	curenv->env_tf.tf_eip = elf->e_entry;
 
+	
 	/* initialize the stack*/
 	if((r = init_stack(argv, &curenv->env_tf.tf_esp))<0)
 		panic("sys_exec: init_stack: %e", r);
 	
 	sched_yield(); // never return.
 }
-
+	
 
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
