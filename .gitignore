@@ -19,3 +19,5 @@
 /.vscode
 /.vs
 /report/~*.md
+compile_commands.json
+*.srctrl*

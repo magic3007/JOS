@@ -129,7 +129,8 @@ sched_halt(void)
 		// Uncomment the following line after completing exercise 13
 		"sti\n"
 		"1:\n"
-		"hlt\n"
+		// halts the central processing unit (CPU) until the next external interrupt is fired.
+		"hlt\n" 
 		"jmp 1b\n"
 	: : "a" (thiscpu->cpu_ts.ts_esp0));
 }

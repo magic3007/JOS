@@ -91,7 +91,7 @@ check_bitmap(void)
 
 	// Make sure all bitmap blocks are marked in-use
 	for (i = 0; i * BLKBITSIZE < super->s_nblocks; i++)
-		assert(!block_is_free( +i));
+		assert(!block_is_free(2 + i));
 
 	// Make sure the reserved and root blocks are marked in-use.
 	assert(!block_is_free(0));
@@ -163,7 +163,7 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 	
 	if(f->f_indirect == 0){
 		if(alloc == 0){
-			/* if the function needed to allocate an indirect block, but alloc was 0, return -E_NOT_FOUND. */
+			/* if the function needed to allocate an indirect block, but |alloc| was 0, return -E_NOT_FOUND. */
 			return -E_NOT_FOUND;
 		}
 		if((r = alloc_block()) < 0){

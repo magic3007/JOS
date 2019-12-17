@@ -32,7 +32,7 @@ typedef int bool;
 #include <inc/fs.h>
 
 #define ROUNDUP(n, v) ((n) - 1 + (v) - ((n) - 1) % (v))
-#define MAX_DIR_ENTS 128
+#define MAX_DIR_ENTS 128	
 
 struct Dir
 {
@@ -231,13 +231,18 @@ main(int argc, char **argv)
 	if (*s || s == argv[2] || nblocks < 2 || nblocks > 1024)
 		usage();
 
+	// build a file system image and initialize the super block
 	opendisk(argv[1]);
 
+	// create the root directory, and initialize the super block
 	startdir(&super->s_root, &root);
+	// write files under root
 	for (i = 3; i < argc; i++)
 		writefile(&root, argv[i]);
+	// insert the root directory into super block 
 	finishdir(&root);
 
+	// initialize the bitmap
 	finishdisk();
 	return 0;
 }

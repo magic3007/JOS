@@ -38,6 +38,69 @@ Cited form  https://cs.nyu.edu/~mwalfish/classes/15fa/ref/i386/s08_03.htm.
 
 No. As the IO privilege `IOPL` is stored in `eflags` and could be saved and restored along with `eflags`.
 
+> \How to build the file system image?
+
+in `fs/Makefrag`
+
+```makefile
+# How to build the file system image
+$(OBJDIR)/fs/fsformat: fs/fsformat.c
+	@echo + mk $(OBJDIR)/fs/fsformat
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(NATIVE_CFLAGS) -o $(OBJDIR)/fs/fsformat fs/fsformat.c
+
+# run executable file |fsformat| to generate the file system image file clean-fs.img
+$(OBJDIR)/fs/clean-fs.img: $(OBJDIR)/fs/fsformat $(FSIMGFILES)
+	@echo + mk $(OBJDIR)/fs/clean-fs.img
+	$(V)mkdir -p $(@D)
+	$(V)$(OBJDIR)/fs/fsformat $(OBJDIR)/fs/clean-fs.img 1024 $(FSIMGFILES)
+
+# copy the file system image
+$(OBJDIR)/fs/fs.img: $(OBJDIR)/fs/clean-fs.img
+	@echo + cp $(OBJDIR)/fs/clean-fs.img $@
+	$(V)cp $(OBJDIR)/fs/clean-fs.img $@
+
+all: $(OBJDIR)/fs/fs.img
+```
+
+in `fs/fsformat.c`:
+
+```c
+int
+main(int argc, char **argv)
+{
+	int i;
+	char *s;
+	struct Dir root;
+
+	assert(BLKSIZE % sizeof(struct File) == 0);
+
+	if (argc < 3)
+		usage();
+
+	nblocks = strtol(argv[2], &s, 0);
+	if (*s || s == argv[2] || nblocks < 2 || nblocks > 1024)
+		usage();
+
+	// build a file system image and initialize the super block
+	opendisk(argv[1]);
+
+	// create the root directory, and initialize the super block
+	startdir(&super->s_root, &root);
+	// write files under root
+	for (i = 3; i < argc; i++)
+		writefile(&root, argv[i]);
+	// insert the root directory into super block 
+	finishdir(&root);
+
+	// initialize the bitmap
+	finishdisk();
+	return 0;
+}
+```
+
+
+
 ### The Block Cache
 
 > **Exercise 2.** Implement the `bc_pgfault` and `flush_block` functions in `fs/bc.c`. `bc_pgfault` is a page fault handler, just like the one your wrote in the previous lab for copy-on-write fork, except that its job is to load pages in from the disk in response to a page fault. When writing this, keep in mind that (1) `addr` may not be aligned to a block boundary and (2) `ide_read` operates in sectors, not blocks.

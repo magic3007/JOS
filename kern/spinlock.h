@@ -42,7 +42,9 @@ unlock_kernel(void)
 	// one CPU at a time and has a long time-slice.  Without the
 	// pause, this CPU is likely to reacquire the lock before
 	// another CPU has even been given a chance to acquire it.
+	/* Gives hint to processor that improves performance of spin-wait loops. */
 	asm volatile("pause");
+	
 }
 
 #endif
